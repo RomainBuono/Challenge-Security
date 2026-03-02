@@ -13,6 +13,9 @@ import plotly.graph_objects as go
 class map_service:
     """Service de création de cartes (points, bulles, choroplèthes)."""
 
+    _SIZE_MAX = 32
+    _FLAT_COLOR = "steelblue"
+
     def create_points_map(
         self,
         df: pd.DataFrame,
@@ -75,13 +78,14 @@ class map_service:
         valid_hover_cols = [c for c in (hover_cols or []) if c in clean_df.columns]
         hover_data_dict = {c: True for c in valid_hover_cols}
 
-        # Couleur optionnelle — si pas de couleur explicite mais taille présente,
-        # on utilise la métrique de taille comme couleur pour afficher la légende
+        # Masquer _size_log du hover quand log scale est actif
+        if size_col and size_col != metric_col:
+            hover_data_dict[size_col] = False
+
+        # Couleur : uniquement si explicitement demandée
         effective_color = None
         if color_col and color_col in clean_df.columns:
             effective_color = color_col
-        elif size_col and size_col in clean_df.columns:
-            effective_color = size_col
 
         # color_continuous_scale only for numeric color columns
         ccs = None
@@ -100,10 +104,27 @@ class map_service:
             hover_name=valid_hover_cols[0] if valid_hover_cols else None,
             projection="natural earth",
             title=title,
-            size_max=32,
+            size_max=self._SIZE_MAX,
         )
-        fig.update_layout(height=650)
 
+        # Si pas de couleur, forcer une couleur unie
+        if effective_color is None:
+            for trace in fig.data:
+                trace.marker.color = self._FLAT_COLOR
+                trace.showlegend = False
+
+        # Légende de taille (cercles de référence)
+        if size_col:
+            self._add_size_legend(
+                fig,
+                clean_df,
+                size_col,
+                metric_label=metric_col or "",
+                log_scale=log_scale,
+                color=self._FLAT_COLOR if effective_color is None else "gray",
+            )
+
+        fig.update_layout(height=650)
         return fig
 
     # Palettes proposées à l'utilisateur
@@ -201,6 +222,58 @@ class map_service:
     def to_html(fig: go.Figure) -> str:
         """Convertit une figure Plotly en HTML."""
         return fig.to_html()
+
+    @classmethod
+    def _add_size_legend(
+        cls,
+        fig: go.Figure,
+        df: pd.DataFrame,
+        size_col: str,
+        metric_label: str,
+        log_scale: bool,
+        color: str = "steelblue",
+        n_levels: int = 4,
+    ) -> None:
+        """Ajoute des traces fantômes formant une légende de taille (cercles)."""
+        vals = df[size_col].dropna()
+        if vals.empty or vals.max() == 0:
+            return
+
+        vmax = float(vals.max())
+        vmin = float(vals.min())
+        size_max = cls._SIZE_MAX
+
+        # Valeurs représentatives réparties linéairement
+        if vmin == vmax:
+            rep = [vmax]
+        else:
+            rep = list(np.linspace(vmin, vmax, n_levels))
+
+        for v in rep:
+            # Diamètre proportionnel (cohérent avec px scatter size_max)
+            diameter = max(5, size_max * float(np.sqrt(v / vmax))) if vmax > 0 else 8
+
+            # Valeur originale (avant log) pour le libellé
+            orig = float(np.expm1(v)) if log_scale else float(v)
+            label = f"{int(round(orig)):,}" if orig >= 1 else f"{orig:.2f}"
+
+            fig.add_trace(
+                go.Scattergeo(
+                    lat=[None],
+                    lon=[None],
+                    mode="markers",
+                    marker=dict(
+                        size=diameter,
+                        color=color,
+                        line=dict(width=1, color="DarkSlateGrey"),
+                        sizemode="diameter",
+                    ),
+                    name=f"{metric_label} = {label}",
+                    legendgroup="taille",
+                    legendgrouptitle=dict(text="Taille"),
+                    showlegend=True,
+                )
+            )
 
     @staticmethod
     def _apply_log_scale(
