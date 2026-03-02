@@ -1,0 +1,7 @@
+[server]
+# Force le rechargement dès qu'un fichier Python du projet est modifié
+runOnSave = true
+
+[development]
+# Surveille les modifications dans les modules importés
+watchExternalProjects = true
