@@ -79,13 +79,17 @@ try:
             f"SELECT COUNT(*) AS total FROM {selected_table}"
         )
         max_rows = int(count_df.iloc[0]["total"]) if not count_df.empty else 20000
-        default_rows = min(5000, max_rows)
+        # Aligner la valeur par défaut sur le pas du slider (200)
+        default_rows = min(5000, max_rows) // 200 * 200
+        if default_rows < 200:
+            default_rows = 200
         # Utiliser un key unique pour que Streamlit conserve le choix utilisateur
         _slider_key = f"row_limit_{selected_table}"
+        _max_slider = max(200, max_rows) // 200 * 200
         row_limit = st.slider(
             "Nombre de lignes",
             min_value=200,
-            max_value=max(200, max_rows),
+            max_value=_max_slider,
             value=default_rows,
             step=200,
             key=_slider_key,
@@ -128,19 +132,22 @@ try:
                     max_available = parsed_max
 
         if min_available is not None and max_available is not None:
+            # Arrondir les bornes à la minute pour correspondre au step du slider
+            _min_dt = min_available.to_pydatetime().replace(second=0, microsecond=0)
+            _max_dt = max_available.to_pydatetime().replace(second=0, microsecond=0)
+            if _max_dt < max_available.to_pydatetime():
+                _max_dt += timedelta(minutes=1)
+
             st.caption(f"Plage disponible : {min_available} → {max_available}")
-            if min_available == max_available:
+            if _min_dt == _max_dt:
                 st.info("La base ne contient qu'un seul instant.")
-                start_time, end_time = min_available, max_available
+                start_time, end_time = _min_dt, _max_dt
             else:
                 start_time, end_time = st.slider(
                     "Plage temporelle",
-                    min_value=min_available.to_pydatetime(),
-                    max_value=max_available.to_pydatetime(),
-                    value=(
-                        min_available.to_pydatetime(),
-                        max_available.to_pydatetime(),
-                    ),
+                    min_value=_min_dt,
+                    max_value=_max_dt,
+                    value=(_min_dt, _max_dt),
                     step=timedelta(minutes=1),
                     format="YYYY-MM-DD HH:mm:ss",
                     key=f"time_range_{selected_table}",
