@@ -1,0 +1,16 @@
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+WORKDIR /app
+
+# Installation des dépendances via le lockfile
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+# Copie du code source
+COPY src ./src
+
+# Port par défaut pour Streamlit
+EXPOSE 8501
+
+# Lancement de l'application
+CMD ["uv", "run", "streamlit", "run", "src/app/main.py", "--server.port=8501", "--server.address=0.0.0.0"]

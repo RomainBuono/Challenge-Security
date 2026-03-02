@@ -1,0 +1,20 @@
+# Python & uv
+__pycache__/
+.venv/
+.python-version
+uv.lock
+
+# Environnement & Secrets
+.env
+*.pyc
+
+# Données (Très important vu la taille des fichiers du projet)
+data/
+*.zip
+*.log
+*.parquet
+*.csv
+
+# IDE
+.vscode/
+.idea/
