@@ -6,11 +6,18 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "cryptography>=46.0.5",
+    "dataclasses>=0.8",
+    "matplotlib>=3.10.8",
+    "mistralai>=1.12.4",
     "pandas>=2.3.3",
     "plotly>=6.5.2",
     "pymysql>=1.1.2",
     "python-dotenv>=1.2.2",
+    "scikit-learn>=1.8.0",
+    "scipy>=1.17.1",
+    "seaborn>=0.13.2",
     "requests>=2.31.0",
     "sqlalchemy>=2.0.47",
     "streamlit>=1.54.0",
+    "typing>=3.10.0.0",
 ]
