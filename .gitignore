@@ -17,3 +17,6 @@ uv.lock
 # IDE
 .vscode/
 .idea/
+
+# images
+*.png
