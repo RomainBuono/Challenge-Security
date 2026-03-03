@@ -1,33 +1,70 @@
+import sys
+from pathlib import Path
+
+# 1. Résolution dynamique des chemins (Architecture robuste)
+root_path = Path(__file__).resolve().parent.parent.parent.parent
+if str(root_path) not in sys.path:
+    sys.path.insert(0, str(root_path))
+
 import streamlit as st
+import pandas as pd
 
-from src.app.utils import get_db_client
+# Importations locales
 from src.data.mariadb_client import MariaDBClient
+from src.detection_anomaly.detection_anomaly import CAHAnalyzer, SecurityOrchestrator
 
-st.set_page_config(page_title="Exploration DB", layout="wide")
-st.header("🗄️ Parcours des données")
+# Configuration de la page
+st.set_page_config(page_title="Exploration DB & IA Cyber", page_icon="🛡️", layout="wide")
+st.title("🛡️ Tableau de Bord SOC : Exploration & XAI")
 
-db = get_db_client()
+# --- 1. Récupération des données avec Cache ---
+@st.cache_data(ttl=600, show_spinner="Connexion à MariaDB...")
+def load_firewall_logs():
+    """Charge les logs depuis MariaDB avec un cache de 10 minutes."""
+    db = MariaDBClient()
+    return db.fetch_logs(table_name="FW", limit=1000)
 
 try:
-    # 1. Récupération des métriques de volume
-    total_db = db.count_all_logs(table_name="FW")
+    df_logs = load_firewall_logs()
+    
+    # Affichage du tableau de données
+    st.write(f"### 📋 Aperçu des logs réseau (Total : {len(df_logs)})")
+    st.dataframe(df_logs, use_container_width=True)
 
-    # 2. Récupération de l'échantillon pour affichage
-    limit = 50
-    df = db.fetch_logs(table_name="FW", limit=limit)
-
-    # 3. Affichage des compteurs
-    col1, col2 = st.columns(2)
-    col1.metric("Total en Base Cloud", f"{total_db:,}")
-    col2.metric("Lignes affichées ci-dessous", f"{len(df):,}")
-
+    # --- 2. Section Analyse LLM ---
     st.divider()
+    st.subheader("🤖 Analyse Experte d'Anomalies (Mistral)")
+    st.info("Cette analyse combine une Classification Ascendante Hiérarchique (CAH) mathématique avec l'expertise d'un LLM pour qualifier les menaces.")
 
-    # 4. Affichage du tableau (renderDataTable)
-    if not df.empty:
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.info("La table est actuellement vide.")
+    # Bouton de déclenchement
+    if st.button("🚀 Lancer l'analyse cyber experte", type="primary"):
+        if df_logs.empty:
+            st.warning("Le dataset est vide. Impossible de lancer l'analyse.")
+        else:
+            # Spinner pour patienter pendant l'inférence
+            with st.spinner("Analyse topologique et requêtage de Mistral en cours... Veuillez patienter."):
+                try:
+                    # Instanciation de tes classes métiers
+                    cah = CAHAnalyzer(df_logs)
+                    orchestrator = SecurityOrchestrator(model_name="mistral-medium-latest")
+                    
+                    # Exécution du pipeline
+                    report_path = orchestrator.run_analysis(cah)
+                    
+                    # Lecture du rapport Markdown généré
+                    with open(report_path, "r", encoding="utf-8") as f:
+                        markdown_report = f.read()
+                    
+                    st.success("Analyse terminée avec succès !")
+                    
+                    # 3. Affichage du rapport
+                    with st.expander("📄 Voir le Rapport XAI Détaillé", expanded=True):
+                        # L'attribut unsafe_allow_html=True est OBLIGATOIRE ici 
+                        # car ton script génère une balise HTML <img> avec du base64
+                        st.markdown(markdown_report, unsafe_allow_html=True)
+                        
+                except Exception as e:
+                    st.error(f"❌ Une erreur s'est produite lors de l'exécution du modèle : {e}")
 
 except Exception as e:
-    st.error(f"Erreur lors de l'exploration : {e}")
+    st.error(f"❌ Erreur de connexion à la base de données : {e}")

@@ -1,3 +1,13 @@
+import sys
+from pathlib import Path
+
+# Calcul dynamique du chemin absolu vers la racine du projet (Challenge-Security)
+root_path = Path(__file__).resolve().parent.parent.parent
+
+# Ajout au PYTHONPATH s'il n'y est pas déjà
+if str(root_path) not in sys.path:
+    sys.path.insert(0, str(root_path))
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
