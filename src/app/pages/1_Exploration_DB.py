@@ -49,7 +49,7 @@ try:
         if max_rows and max_rows > 0 and max_rows not in row_options:
             row_options.append(max_rows)
         row_options = sorted(set(row_options))
-        default = 1000 if 1000 in row_options else row_options[0]
+        default = 100 if 100 in row_options else row_options[0]
         # present options with friendly labels (max value shown as-is)
         option_labels = [str(x) for x in row_options]
         selected_idx = st.selectbox(
