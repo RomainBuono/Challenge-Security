@@ -59,12 +59,15 @@ def render_vulnerable_ports(db):
     else:
         st.info("Aucune donnée disponible pour les ports critiques.")
 
+
 def render_vue1_descriptive_analysis(db) -> None:
     st.subheader("📈 Monitoring du trafic (Vue temporelle)")
-    st.caption("💡 Utilisez la barre latérale, les filtres ci-dessous ou interagissez directement avec le graphique (Pan/Zoom) pour explorer les données.")
+    st.caption(
+        "💡 Utilisez la barre latérale, les filtres ci-dessous ou interagissez directement avec le graphique (Pan/Zoom) pour explorer les données."
+    )
 
     min_dt, max_dt = db.get_time_bounds()
-    
+
     time_range = st.slider(
         "Restriction de la plage temporelle :",
         min_value=min_dt.to_pydatetime(),
@@ -81,31 +84,39 @@ def render_vue1_descriptive_analysis(db) -> None:
             "User Ports (1024 - 49151)": (1024, 49151),
             "Dynamic/Private Ports (49152 - 65535)": (49152, 65535),
         }
-        selected_range = st.selectbox("Plage de ports :", options=list(port_ranges.keys()))
+        selected_range = st.selectbox(
+            "Plage de ports :", options=list(port_ranges.keys())
+        )
         p_min, p_max = port_ranges[selected_range] if selected_range else (0, 65535)
 
     with c2:
         granularity_map: dict[str, str] = {
             "Par seconde": "second",
             "Par minute": "minute",
-            "Par heure": "hour"
+            "Par heure": "hour",
         }
-        selected_granularity = st.selectbox("Granularité temporelle :", options=list(granularity_map.keys()), index=1)
-        granularity = granularity_map[selected_granularity] if selected_granularity else "minute"
+        selected_granularity = st.selectbox(
+            "Granularité temporelle :", options=list(granularity_map.keys()), index=1
+        )
+        granularity = (
+            granularity_map[selected_granularity] if selected_granularity else "minute"
+        )
 
     with c3:
         rule_filter_enabled = st.checkbox("Activer le filtre par Règle Firewall")
         selected_rule = None
         if rule_filter_enabled:
-            selected_rule = int(st.number_input("ID de la règle :", min_value=1, value=34, step=1))
+            selected_rule = int(
+                st.number_input("ID de la règle :", min_value=1, value=34, step=1)
+            )
 
     df_vue1 = db.get_vue1_data(
-        rule_id=selected_rule, 
-        port_min=p_min, 
-        port_max=p_max, 
+        rule_id=selected_rule,
+        port_min=p_min,
+        port_max=p_max,
         granularity=granularity,
         start_time=time_range[0].strftime("%Y-%m-%d %H:%M:%S"),
-        end_time=time_range[1].strftime("%Y-%m-%d %H:%M:%S")
+        end_time=time_range[1].strftime("%Y-%m-%d %H:%M:%S"),
     )
 
     if df_vue1.empty:
@@ -122,9 +133,9 @@ def render_vue1_descriptive_analysis(db) -> None:
         color="action",
         color_discrete_map={"Permit": "#2ecc71", "Deny": "#e74c3c"},
         category_orders={"action": ["Permit", "Deny"]},
-        barmode="stack"
+        barmode="stack",
     )
-    
+
     fig_time.update_layout(
         xaxis_title="Temps",
         yaxis_title="Volume de requêtes",
@@ -132,18 +143,19 @@ def render_vue1_descriptive_analysis(db) -> None:
         legend_title=None,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(l=0, r=0, t=30, b=0),
-        bargap=0.05
+        bargap=0.05,
     )
-    
-    fig_time.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128, 128, 128, 0.2)')
-    
+
+    fig_time.update_yaxes(
+        showgrid=True, gridwidth=1, gridcolor="rgba(128, 128, 128, 0.2)"
+    )
+
     fig_time.update_xaxes(
-        showgrid=False,
-        range=[time_range[0], time_range[1]],
-        constrain='domain'
+        showgrid=False, range=[time_range[0], time_range[1]], constrain="domain"
     )
 
     st.plotly_chart(fig_time, use_container_width=True)
+
 
 def render_statistics_section(db):
     """Tier 3: Statistics and Anomalies."""
@@ -223,6 +235,7 @@ def render_port_scan_analysis(db) -> None:
     else:
         st.info("Aucune donnée disponible.")
 
+
 def main() -> None:
     st.set_page_config(page_title="Dashboard Sécurité", layout="wide")
     db = get_db_client()
@@ -230,28 +243,43 @@ def main() -> None:
 
     try:
         stats = db.get_security_ratios()
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Total Flux", f"{stats['total']:,}")
-        k2.metric("Autorisés", f"{stats['accepted']:,}")
-        k3.metric("Bloqués", f"{stats['rejected']:,}")
-        k4.metric("Ratio d'Acceptation", f"{stats['ratio']:.1f}%")
+
+        def _kpi_box(col, label, value, subtitle=None, bg="#ffffff"):
+            col.markdown(
+                f"""
+                        <div style="background:{bg}; padding:14px; border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08);">
+                            <div style="font-size:13px; color:#6c757d">{label}</div>
+                            <div style="font-size:22px; font-weight:700; margin-top:6px;">{value}</div>
+                            {f'<div style="font-size:12px; color:#6c757d; margin-top:6px;">{subtitle}</div>' if subtitle else ""}
+                        </div>
+                        """,
+                unsafe_allow_html=True,
+            )
+
+        k1, k2, k3, k4 = st.columns(4, gap="large")
+        _kpi_box(k1, "Total Flux", f"{stats['total']:,}")
+        _kpi_box(k2, "Autorisés", f"{stats['accepted']:,}")
+        _kpi_box(k3, "Bloqués", f"{stats['rejected']:,}")
+        _kpi_box(k4, "Ratio d'Acceptation", f"{stats['ratio']:.1f}%")
+
         st.divider()
 
         # Inversion : Monitoring temporel en premier
         render_vue1_descriptive_analysis(db)
         st.divider()
-        
+
         # Ports vulnérables en second
         render_vulnerable_ports(db)
         st.divider()
-    
+
         render_port_scan_analysis(db)
         st.divider()
-        
+
         render_statistics_section(db)
 
     except Exception as e:
         st.error(f"Erreur d'exécution : {e}")
+
 
 if __name__ == "__main__":
     main()
