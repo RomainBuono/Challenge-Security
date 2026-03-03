@@ -53,6 +53,11 @@
 
 ---
 
+## ☁️ Déploiement sur Hugging Face
+
+Le projet est déployé sur **Hugging Face Spaces** (Streamlit) : https://huggingface.co/spaces/ConstantinRC/challenge-security
+
+
 ## 🚀 Installation et démarrage
 
 ### Prérequis
@@ -60,10 +65,6 @@
 - Python 3.13+
 - MariaDB server d'où proviennent les données
 - Clé API Mistral AI (optionnelle mais vivement recommandé, pour les rapports automatiques)
-
-## ☁️ Déploiement sur Hugging Face
-
-Le projet est déployé sur **Hugging Face Spaces** (Streamlit) : https://huggingface.co/spaces/ConstantinRC/challenge-security
 
 ### 1. Clonage et dépendances
 
