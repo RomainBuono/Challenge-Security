@@ -1,4 +1,3 @@
-# pipeline.py — Version corrigée (Code Review SISE-OPSIE 2026)
 
 import os
 import io
@@ -316,26 +315,17 @@ ou
 
         n_fraud    = int((scores == -1).sum())
         fraud_rate = (n_fraud / metrics.n_samples) * 100
-        fraud_sample = analyzer.df_raw[scores == -1].head(5).to_markdown(index=False)
+        fraud_sample = analyzer.df_raw[scores == -1].head(5).to_markdown(index=False, tablefmt="pipe")
 
-        # ── Sections 1–5 écrites UNIQUEMENT par le code Python ──────────────
-        # FIX IMAGE : on encode le PNG en base64 et on l'intègre directement
-        # dans le Markdown → aucune dépendance au chemin relatif,
-        # fonctionne dans Streamlit, dans un PDF exporté, et en standalone.
-        img_b64 = _img_to_base64(img_path)
-        img_tag = (
-            f'<img src="data:image/png;base64,{img_b64}" '
-            f'alt="Dendrogramme CAH" style="max-width:100%;">'
-            if img_b64
-            else f"*(Image non disponible : {img_path})*"
-        )
+        img_tag = f"![Dendrogramme CAH]({img_path})"
 
-        sections_1_to_5 = f"""# RAPPORT D'ANALYSE CYBERSÉCURITÉ (XAI)
+        sections_1_to_5 = f"""# RAPPORT D'ANALYSE CYBERSÉCURITÉ
 
     ## 1. Métriques Globales du Dataset
     - Nombre total de logs analysés : {metrics.n_samples}
     - Nombre de features : {len(analyzer.df_numeric.columns)}
     - Entropie des colonnes :
+    ```json
     {json.dumps(metrics.feature_entropy, indent=2)}
 
     ## 2. Analyse Topologique (CAH Ward)
@@ -364,8 +354,7 @@ ou
         # ── Sections 6–7 générées par le LLM ────────────────────────────────
         # FIX PREAMBLE : le LLM ne reçoit QUE les données contextuelles,
         # pas le rapport à recopier → impossible pour lui d'ajouter une intro.
-        expert_prompt = f"""Tu es un expert SOC. Tu dois produire UNIQUEMENT deux sections Markdown,
-    sans aucun texte introductif, sans phrase de présentation, sans backticks de code.
+        expert_prompt = f"""Tu es un expert SOC. Tu dois produire UNIQUEMENT deux sections Markdown, sans aucun texte introductif, sans phrase de présentation, sans backticks de code.
     Commence ta réponse DIRECTEMENT par "## 6. Synthèse de l'Expert".
 
     ---
