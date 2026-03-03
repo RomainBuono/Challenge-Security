@@ -320,7 +320,9 @@ class MariaDBClient:
             return pd.read_sql(query, conn)
 
     @st.cache_data(ttl=3600)
-    def get_time_bounds(_self, table_name: str = "FW") -> tuple[pd.Timestamp, pd.Timestamp]:
+    def get_time_bounds(
+        _self, table_name: str = "FW"
+    ) -> tuple[pd.Timestamp, pd.Timestamp]:
         query = text(f"SELECT MIN(datetime), MAX(datetime) FROM {table_name}")
         with _self.engine.connect() as conn:
             res = conn.execute(query).fetchone()
@@ -330,19 +332,19 @@ class MariaDBClient:
 
     @st.cache_data(ttl=60)
     def get_vue1_data(
-        _self, 
-        rule_id: int | None = None, 
-        port_min: int = 0, 
-        port_max: int = 65535, 
+        _self,
+        rule_id: int | None = None,
+        port_min: int = 0,
+        port_max: int = 65535,
         granularity: str = "minute",
         start_time: str | None = None,
-        end_time: str | None = None
+        end_time: str | None = None,
     ) -> pd.DataFrame:
-        
+
         formats = {
             "second": "%Y-%m-%d %H:%i:%s",
             "minute": "%Y-%m-%d %H:%i:00",
-            "hour": "%Y-%m-%d %H:00:00"
+            "hour": "%Y-%m-%d %H:00:00",
         }
         date_format = formats.get(granularity, formats["minute"])
 
@@ -366,14 +368,15 @@ class MariaDBClient:
             base_query += " AND policyid = :rule_id"
             params["rule_id"] = rule_id
 
-        base_query += " GROUP BY time_window, UPPER(proto), LOWER(action) ORDER BY time_window"
+        base_query += (
+            " GROUP BY time_window, UPPER(proto), LOWER(action) ORDER BY time_window"
+        )
 
         with _self.engine.connect() as conn:
             df = pd.read_sql(text(base_query), conn, params=params)
             if not df.empty:
                 df["time_window"] = pd.to_datetime(df["time_window"])
             return df
-
 
     @st.cache_data(ttl=300)
     def get_port_scan_data(_self, limit: int = 1000) -> pd.DataFrame:

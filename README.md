@@ -102,6 +102,7 @@ L'application sera accessible sur `http://localhost:8501`
 
 ### 4. Déploiement Docker (optionnel)
 
+N'oubliez pas d'actualiser votre environnement python avec uv sync avant de faire ces étapes
 ```bash
 # Construction de l'image
 docker build -f docker/dockerfile -t sise-security:latest .
