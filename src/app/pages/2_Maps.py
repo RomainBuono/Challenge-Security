@@ -14,7 +14,7 @@ import streamlit as st
 
 from src.app.services.geo_service import GeoService
 from src.app.services.map_service import map_service
-from src.data.mariadb_client import MariaDBClient
+from src.app.utils import get_db_client
 
 
 def _find_default_column(columns: list[str], candidates: list[str]) -> str | None:
@@ -54,7 +54,7 @@ st.caption(
 
 _TIME_COL = "datetime"  # colonne temporelle fixe
 
-db_client = MariaDBClient()
+db_client = get_db_client()
 maps = map_service()
 
 if "geo" not in st.session_state:
@@ -66,7 +66,7 @@ geo: GeoService = st.session_state["geo"]
 @st.cache_data(ttl=300)
 def _cached_list_tables() -> list:
     try:
-        return MariaDBClient().list_tables()
+        return get_db_client().list_tables()
     except Exception:
         return []
 
@@ -74,7 +74,7 @@ def _cached_list_tables() -> list:
 @st.cache_data(ttl=300)
 def _cached_list_columns(table_name: str) -> list:
     try:
-        return MariaDBClient().list_columns(table_name)
+        return get_db_client().list_columns(table_name)
     except Exception:
         return []
 
@@ -82,7 +82,7 @@ def _cached_list_columns(table_name: str) -> list:
 @st.cache_data(ttl=300)
 def _cached_execute_query(sql: str) -> pd.DataFrame:
     try:
-        return MariaDBClient().execute_query(sql)
+        return get_db_client().execute_query(sql)
     except Exception:
         return pd.DataFrame()
 
@@ -92,7 +92,7 @@ def _cached_fetch_table(
     table_name: str, columns: list, where_clause: str | None, limit: int
 ) -> pd.DataFrame:
     try:
-        return MariaDBClient().fetch_table(
+        return get_db_client().fetch_table(
             table_name=table_name,
             columns=columns,
             where_clause=where_clause,
