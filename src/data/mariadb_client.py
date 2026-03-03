@@ -319,32 +319,54 @@ class MariaDBClient:
         with _self.engine.connect() as conn:
             return pd.read_sql(query, conn)
 
+    @st.cache_data(ttl=3600)
+    def get_time_bounds(_self, table_name: str = "FW") -> tuple[pd.Timestamp, pd.Timestamp]:
+        query = text(f"SELECT MIN(datetime), MAX(datetime) FROM {table_name}")
+        with _self.engine.connect() as conn:
+            res = conn.execute(query).fetchone()
+            if res and res[0] and res[1]:
+                return pd.to_datetime(res[0]), pd.to_datetime(res[1])
+            return pd.Timestamp.now(), pd.Timestamp.now()
+
     @st.cache_data(ttl=60)
     def get_vue1_data(
-        _self, rule_id: int = None, port_min: int = 0, port_max: int = 65535
+        _self, 
+        rule_id: int | None = None, 
+        port_min: int = 0, 
+        port_max: int = 65535, 
+        granularity: str = "minute",
+        start_time: str | None = None,
+        end_time: str | None = None
     ) -> pd.DataFrame:
-        """
-        Retrieves aggregated flow data for Vue 1, supporting temporal distribution,
-        protocol grouping, and rule/port filtering.
-        """
-        base_query = """
+        
+        formats = {
+            "second": "%Y-%m-%d %H:%i:%s",
+            "minute": "%Y-%m-%d %H:%i:00",
+            "hour": "%Y-%m-%d %H:00:00"
+        }
+        date_format = formats.get(granularity, formats["minute"])
+
+        base_query = f"""
             SELECT 
-                DATE_FORMAT(datetime, '%Y-%m-%d %H:00:00') AS time_window,
+                DATE_FORMAT(datetime, '{date_format}') AS time_window,
                 UPPER(proto) AS proto,
                 LOWER(action) AS action,
                 COUNT(*) AS count
             FROM FW
             WHERE dstport BETWEEN :port_min AND :port_max
         """
-        params = {"port_min": port_min, "port_max": port_max}
+        params: dict[str, any] = {"port_min": port_min, "port_max": port_max}
+
+        if start_time and end_time:
+            base_query += " AND datetime BETWEEN :start_time AND :end_time"
+            params["start_time"] = start_time
+            params["end_time"] = end_time
 
         if rule_id is not None:
             base_query += " AND policyid = :rule_id"
             params["rule_id"] = rule_id
 
-        base_query += (
-            " GROUP BY time_window, UPPER(proto), LOWER(action) ORDER BY time_window"
-        )
+        base_query += " GROUP BY time_window, UPPER(proto), LOWER(action) ORDER BY time_window"
 
         with _self.engine.connect() as conn:
             df = pd.read_sql(text(base_query), conn, params=params)
@@ -352,30 +374,6 @@ class MariaDBClient:
                 df["time_window"] = pd.to_datetime(df["time_window"])
             return df
 
-    @st.cache_data(ttl=300)
-    def get_vue3_scatter_data(_self, limit: int = 2000) -> pd.DataFrame:
-        """
-        Agrège les données par IP source pour la détection de scanners.
-        """
-        query = text("""
-            SELECT 
-                ipsrc,
-                COUNT(DISTINCT ipdst) AS dest_count,
-                COUNT(*) AS total_flows,
-                SUM(CASE WHEN LOWER(TRIM(action)) = 'permit' THEN 1 ELSE 0 END) AS permit_count,
-                SUM(CASE WHEN LOWER(TRIM(action)) = 'deny' THEN 1 ELSE 0 END) AS deny_count
-            FROM FW
-            GROUP BY ipsrc
-            ORDER BY total_flows DESC
-            LIMIT :limit
-        """)
-
-        with _self.engine.connect() as conn:
-            df = pd.read_sql(query, conn, params={"limit": limit})
-            if not df.empty:
-                # Calcul du ratio pour l'échelle de couleur
-                df["deny_ratio"] = (df["deny_count"] / df["total_flows"]) * 100
-            return df
 
     @st.cache_data(ttl=300)
     def get_port_scan_data(_self, limit: int = 1000) -> pd.DataFrame:
