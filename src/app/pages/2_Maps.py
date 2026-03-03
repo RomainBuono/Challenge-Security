@@ -93,11 +93,10 @@ try:
             default_rows = 200
         # Utiliser un key unique pour que Streamlit conserve le choix utilisateur
         _slider_key = f"row_limit_{selected_table}"
-        _max_slider = max(200, max_rows) // 200 * 200
         row_limit = st.slider(
             "Nombre de lignes",
             min_value=200,
-            max_value=_max_slider,
+            max_value=max(200, max_rows),
             value=default_rows,
             step=200,
             key=_slider_key,
