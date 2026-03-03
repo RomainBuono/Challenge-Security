@@ -1,4 +1,4 @@
-# 🛡️ SISE-Challenge-Security
+# 🛡️ SISE-Challenge-Security (2 days sprint)
 
 > **Plateforme d'analyse cybersécurité en temps réel**  
 > Détection d'anomalies par Machine Learning, géolocalisation d'IPs et monitoring de logs firewall
