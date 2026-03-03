@@ -49,6 +49,8 @@ class AdvancedSecurityAnalyzer:
         self.log_path = Path(log_path)
         self.df: pl.DataFrame | None = None
         self.ip_locations: dict[str, dict] = {}
+        self.output_dir = Path(".")   # ou Path("outputs/dataviz")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self._setup_style()
 
     def _setup_style(self) -> None:
@@ -254,10 +256,15 @@ class AdvancedSecurityAnalyzer:
     def plot_tcp_deep_dive(self) -> None:
         """Analyse matricielle TCP : Ports vs Actions."""
         df_tcp = self.df.filter(pl.col("protocol_clean") == "TCP")
-        
-        # Pivot Polars natif remplaçant le groupby.unstack()
-        top_ports = df_tcp["dst_port"].value_counts().sort("count", descending=True).head(15)["dst_port"].to_list()
-        
+
+        top_ports = (
+            df_tcp["dst_port"]
+            .value_counts()
+            .sort("count", descending=True)
+            .head(15)["dst_port"]
+            .to_list()
+        )
+
         pivot_matrix = (
             df_tcp.filter(pl.col("dst_port").is_in(top_ports))
             .group_by(["dst_port", "action"])
@@ -265,21 +272,217 @@ class AdvancedSecurityAnalyzer:
             .pivot(values="count", index="dst_port", on="action", aggregate_function="sum")
             .fill_null(0)
         )
-        
-        # Formatage pour Seaborn
+
         actions = [col for col in pivot_matrix.columns if col != "dst_port"]
         matrix_data = pivot_matrix.select(actions).to_numpy()
-        port_labels = [f"{p} ({GeoSecurityConfig.KNOWN_PORTS.get(p, 'Unk')})" for p in pivot_matrix["dst_port"]]
 
-        plt.figure(figsize=(12, 8))
-        sns.heatmap(matrix_data, annot=True, fmt=".0f", cmap="YlOrRd", 
-                    yticklabels=port_labels, xticklabels=actions)
-        
-        plt.title("Répartition des Actions par Port de Destination (TCP)", fontweight="bold")
+        # FIX : labels enrichis avec le nom du service ET le numéro de port bien visible
+        port_labels = [
+            f"  {GeoSecurityConfig.KNOWN_PORTS.get(p, '?'):>8}  │  {p:<6}"
+            for p in pivot_matrix["dst_port"]
+        ]
+
+        c = GeoSecurityConfig.COLORS
+        fig, ax = plt.subplots(figsize=(13, 9))
+
+        sns.heatmap(
+            matrix_data,
+            annot=True,
+            fmt=".0f",
+            cmap="YlOrRd",
+            yticklabels=port_labels,
+            xticklabels=actions,
+            linewidths=0.5,           # FIX : séparateurs entre cellules → grille lisible
+            linecolor=c["grid"],
+            annot_kws={"size": 10, "weight": "bold", "color": "#111111"},
+            ax=ax,
+        )
+
+        # FIX : forcer la couleur et la taille des labels Y (ignorés par rcParams dans heatmap)
+        ax.set_yticklabels(
+            ax.get_yticklabels(),
+            fontsize=11,
+            color=c["text"],          # blanc cassé — visible sur fond sombre
+            fontfamily="monospace",   # alignement parfait du séparateur │
+            rotation=0,               # horizontal — jamais de rotation sur les ports
+            va="center",
+        )
+
+        # FIX : idem pour l'axe X (actions : Permit / Deny)
+        ax.set_xticklabels(
+            ax.get_xticklabels(),
+            fontsize=12,
+            color=c["text"],
+            fontweight="bold",
+            rotation=0,
+        )
+
+        # FIX : colorbar lisible sur fond sombre
+        cbar = ax.collections[0].colorbar
+        cbar.ax.yaxis.set_tick_params(color=c["text"], labelsize=9)
+        plt.setp(cbar.ax.yaxis.get_ticklabels(), color=c["text"])
+        cbar.set_label("Nombre de connexions", color=c["text"], fontsize=10)
+
+        ax.set_title(
+            "Répartition des Actions par Port de Destination (TCP)",
+            fontweight="bold",
+            fontsize=14,
+            color=c["text"],
+            pad=16,
+        )
+        ax.set_ylabel("Port  │  Service", color=c["muted"], fontsize=11)
+        ax.set_xlabel("Action Firewall", color=c["muted"], fontsize=11)
+
         plt.tight_layout()
-        plt.savefig("tcp_port_actions.png", dpi=150, bbox_inches="tight")
+        plt.savefig("tcp_port_actions.png", dpi=150, bbox_inches="tight",
+                    facecolor=c["bg"])   # FIX : fond sombre conservé à l'export
         plt.close()
-        print(" 💾 tcp_port_actions.png générée.")
+        print("💾 tcp_port_actions.png générée.")
+    
+    def plot_rule_port_action_table(self) -> None:
+        """
+        Génère une table de rapprochement Règle × Port × Action,
+        avec coloration verte (PERMIT) / rouge (DENY) par ligne.
+        Style LaTeX académique sur fond blanc.
+        """
+        c = GeoSecurityConfig.COLORS
+
+        # ── Agrégation Polars ────────────────────────────────────────────────
+        table_df = (
+            self.df.filter(pl.col("protocol_clean") == "TCP")
+            .group_by(["rule_id", "dst_port", "action"])
+            .agg(pl.len().alias("hits"))
+            .sort("hits", descending=True)
+            .head(20)
+            .with_columns([
+                pl.col("dst_port").replace(
+                    GeoSecurityConfig.KNOWN_PORTS,
+                    default="Unknown"
+                ).alias("service")
+            ])
+        )
+
+        rows = table_df.to_dicts()
+
+        # ── Formatage des valeurs ────────────────────────────────────────────
+        col_labels  = ["Rule ID", "Port DST", "Service", "Hits", "Action"]
+        cell_data   = [
+            [
+                str(r["rule_id"]),
+                str(r["dst_port"]),
+                r["service"],
+                f"{r['hits']:,}".replace(",", "\u202f"),   # espace fine française
+                r["action"].upper(),
+            ]
+            for r in rows
+        ]
+
+        # ── Couleurs par ligne selon l'action ────────────────────────────────
+        COLOR_PERMIT = "#d4edda"   # vert pastel
+        COLOR_DENY   = "#f8d7da"   # rouge pastel
+        COLOR_HEADER = "#ffffff"
+
+        n_rows = len(cell_data)
+        n_cols = len(col_labels)
+
+        cell_colors = []
+        for r in rows:
+            bg = COLOR_PERMIT if "permit" in r["action"].lower() else COLOR_DENY
+            cell_colors.append([bg] * n_cols)
+
+        # ── Figure ───────────────────────────────────────────────────────────
+        row_height  = 0.42          # hauteur par ligne en inches
+        fig_height  = row_height * (n_rows + 1.5)
+        fig, ax = plt.subplots(figsize=(11, fig_height))
+        fig.patch.set_facecolor("white")
+        ax.axis("off")
+
+        table = ax.table(
+            cellText    = cell_data,
+            colLabels   = col_labels,
+            cellColours = cell_colors,
+            loc         = "center",
+            cellLoc     = "center",
+        )
+
+        table.auto_set_font_size(False)
+        table.scale(1, 1.6)         # hauteur de cellule
+
+        # ── Style des cellules ───────────────────────────────────────────────
+        COL_WIDTHS = [0.10, 0.10, 0.18, 0.14, 0.12]   # largeurs relatives
+
+        for (row_idx, col_idx), cell in table.get_celld().items():
+            cell.set_linewidth(0.6)
+
+            if row_idx == 0:
+                # Header
+                cell.set_facecolor("white")
+                cell.set_text_props(
+                    fontweight="bold",
+                    fontsize=11,
+                    color="#111111",
+                )
+                cell.set_edgecolor("#888888")
+                # Ligne de séparation épaisse sous le header
+                if col_idx == 0:
+                    pass  # géré via linewidth global
+            else:
+                # Corps
+                cell.set_text_props(fontsize=10.5, color="#111111")
+                cell.set_edgecolor("#cccccc")
+
+                # Colonne Rule ID et Action en gras
+                if col_idx in (0, 4):
+                    cell.set_text_props(
+                        fontsize=10.5,
+                        fontweight="bold",
+                        color="#111111",
+                    )
+
+            # Largeurs de colonnes
+            if col_idx < len(COL_WIDTHS):
+                cell.set_width(COL_WIDTHS[col_idx])
+
+        # ── Ligne de séparation header / corps (trait épais) ─────────────────
+        for col_idx in range(n_cols):
+            table[0, col_idx].visible_edges = "open"   # supprime les bords hauts/latéraux du header
+            table[0, col_idx].set_edgecolor("#333333")
+
+        # ── Titre ────────────────────────────────────────────────────────────
+        ax.set_title(
+            "Rapprochement Règle × Port de Destination × Action  (TCP)",
+            fontsize=13,
+            fontweight="bold",
+            color="#111111",
+            pad=14,
+            loc="center",
+        )
+
+        # ── Légende ──────────────────────────────────────────────────────────
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor=COLOR_PERMIT, edgecolor="#aaaaaa", label="PERMIT"),
+            Patch(facecolor=COLOR_DENY,   edgecolor="#aaaaaa", label="DENY"),
+        ]
+        ax.legend(
+            handles=legend_elements,
+            loc="lower right",
+            bbox_to_anchor=(1.0, -0.02),
+            frameon=True,
+            fontsize=9,
+            facecolor="white",
+            edgecolor="#cccccc",
+        )
+
+        plt.tight_layout(pad=0.4)
+        plt.savefig(
+            self.output_dir / "rule_port_action_table.png",
+            dpi=200,
+            bbox_inches="tight",
+            facecolor="white",
+        )
+        plt.close()
+        print("💾 rule_port_action_table.png générée.")
 
     def run_pipeline(self) -> None:
         """Orchestrateur global."""
@@ -288,6 +491,7 @@ class AdvancedSecurityAnalyzer:
         self.plot_static_map_png() # ✅ Appel de la bonne méthode
         self.plot_temporal_analysis()
         self.plot_tcp_deep_dive()
+        self.plot_rule_port_action_table()
         print("\n✅ Analyse terminée avec succès. Rapports disponibles dans le dossier courant.")
 
 if __name__ == "__main__":
