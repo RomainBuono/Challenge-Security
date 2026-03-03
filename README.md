@@ -104,10 +104,13 @@ L'application sera accessible sur `http://localhost:8501`
 
 ```bash
 # Construction de l'image
-docker build -f docker/dockerfile -t sise-security .
+docker build -f docker/dockerfile -t sise-security:latest .
 
-# Lancement du conteneur  
-docker run -p 8501:8501 --env-file .env sise-security
+# Lancement du conteneur (production)
+docker run --rm -p 8501:8501 --env-file .env --name sise-security sise-security:latest
+
+# Développement (monter le code local pour rechargement à chaud)
+docker run --rm -p 8501:8501 --env-file .env -v ${PWD}/src:/app/src --name sise-security-dev sise-security:latest
 ```
 
 ---
@@ -219,6 +222,12 @@ INSERT INTO FW (datetime, ipsrc, ipdst, srcport, dstport, proto, action) VALUES
 ('2024-03-01 14:30:15', '192.168.1.100', '8.8.8.8', 54231, 53, 'UDP', 'permit'),
 ('2024-03-01 14:30:16', '10.0.0.50', '159.84.1.10', 12345, 22, 'TCP', 'deny');
 ```
+
+---
+
+## ☁️ Déploiement sur Hugging Face
+
+Le projet est déployé sur **Hugging Face Spaces** (Streamlit) : https://huggingface.co/spaces/ConstantinRC/challenge-security
 
 ## 👥 Contributeurs
 
